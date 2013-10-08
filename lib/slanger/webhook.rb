@@ -13,9 +13,15 @@ module Slanger
       digest   = OpenSSL::Digest::SHA256.new
       hmac     = OpenSSL::HMAC.hexdigest(digest, Slanger::Config.secret, payload)
 
-      EM::HttpRequest.new(Slanger::Config.webhook_url).
-        post(body: payload, head: { "X-Pusher-Key" => Slanger::Config.app_key, "X-Pusher-Secret" => hmac })
-        # TODO: Exponentially backed off retries for errors
+      Fiber.new do
+        f = Fiber.current
+        
+        EM::HttpRequest.new(Slanger::Config.webhook_url).
+          post(body: payload, head: { "X-Pusher-Key" => Slanger::Config.app_key, "X-Pusher-Secret" => hmac }).
+          callback { f.resume }
+          # TODO: Exponentially backed off retries for errors
+        Fiber.yield
+      end.resume
     end
 
     extend self
